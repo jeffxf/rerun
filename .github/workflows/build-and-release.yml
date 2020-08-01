@@ -1,0 +1,89 @@
+name: Build And Release
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.14
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Build Directory
+      run: pwd
+
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        fi
+
+    - name: Test
+      run: go test -v .
+      
+    - name: Build Linux
+      run: env GOOS=linux GOARCH=amd64 go build -v -o linux/rerun . && zip --junk-paths rerun-linux-x64.zip linux/rerun
+
+    - name: Build MacOS
+      run: env GOOS=darwin GOARCH=amd64 go build -v -o macos/rerun . && zip --junk-paths rerun-macos-x64.zip macos/rerun
+
+    - name: Build Windows
+      run: env GOOS=windows GOARCH=amd64 go build -v -o windows/rerun.exe . && zip --junk-paths rerun-windows-x64.zip windows/rerun.exe
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: true
+
+    - name: Upload Linux Binary To Release
+      id: upload-linux-release-asset 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+        asset_path: ./rerun-linux-x64.zip
+        asset_name: rerun-linux-x64.zip
+        asset_content_type: application/zip
+
+    - name: Upload Macos Binary To Release
+      id: upload-macos-release-asset 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+        asset_path: ./rerun-macos-x64.zip
+        asset_name: rerun-macos-x64.zip
+        asset_content_type: application/zip
+
+    - name: Upload Windows Binary To Release
+      id: upload-windows-release-asset 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+        asset_path: ./rerun-windows-x64.zip
+        asset_name: rerun-windows-x64.zip
+        asset_content_type: application/zip
